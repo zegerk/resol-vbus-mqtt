@@ -33,7 +33,7 @@ const {
     TcpConnection,
     TextConverter,
     VBusRecordingConverter,
-} = require('../resol-vbus');
+} = require('resol-vbus');
 
 
 const config = require('./config');
