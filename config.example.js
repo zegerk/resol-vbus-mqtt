@@ -119,32 +119,4 @@ module.exports = {
 	    heatQuantity1: '00_8015_F76C_10_3ECC_00_0015_5611_10_0100_02_0A_1_008_4_0',
 	    heatQuantity2: '00_8015_4AF9_10_A85F_00_0015_5611_10_0100_01_05_1_004_4_0' 
     },
-
-    /**
-     * Interval (milliseconds) in which data will be uploaded to PvOutput.org. A value of zero disables this functionality.
-     */
-    pvOutputOrgInterval: 0,
-
-    /**
-     * PvOutput.org API key
-     */
-    pvOutputOrgApiKey: 'secret',
-
-    /**
-     * PvOutput.org System ID
-     */
-    pvOutputOrgSystemId: 'insert here',
-
-    /**
-     * A map of PvOutput.org parameters to VBus packet field IDs.
-     *
-     * See https://pvoutput.org/help.html#api-addstatus for possible keys.
-     */
-    pvOutputOrgPacketFieldMap: {
-        v1: '00_0010_111F_10_0100_020_4_0',
-        v2: '00_0010_111F_10_0100_004_4_0',
-        v3: '00_0010_111F_10_0100_028_4_0',
-        v4: '00_0010_111F_10_0100_008_4_0',
-    },
-
 };
