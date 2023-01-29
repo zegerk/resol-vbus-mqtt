@@ -48,11 +48,6 @@ const headerSetConsolidator = new HeaderSetConsolidator({
     timeToLive: config.loggingTimeToLive,
 });
 
-const fsRecorder = new FileSystemRecorder({
-    id: 'fs-destination',
-    path: config.loggingPath,
-});
-
 /**
  * This function is called once the header set is considered "settled".
  * That means that the amount of unique packets in the header set has
@@ -142,6 +137,10 @@ const startMqttLogging = async () => {
         }, {});
 
         let payload;
+
+        /**
+         * @todo : the urlencoded is missing the values per topic code
+         */
         if (config.mqttEncoding === 'urlencoded') {
             payload = Object.keys(config.mqttPacketFieldMap).reduce((memo, key) => {
                 const packetFieldId = config.mqttPacketFieldMap [key];
@@ -218,36 +217,12 @@ const startMqttLogging = async () => {
     }
 };
 
-const startRecorder = async () => {
-    const converter = new Converter({ objectMode: true });
-
-    const onHeaderSet = function(headerSet) {
-        // logger.debug('HeaderSet consolidated...');
-
-        converter.convertHeaderSet(headerSet);
-    };
-
-    try {
-        headerSetConsolidator.on('headerSet', onHeaderSet);
-
-        await fsRecorder.record(converter, {
-            interval: config.loggingInterval,
-            timeToLive: config.loggingTimeToLive,
-        });
-    } finally {
-        headerSetConsolidator.removeListener('headerSet', onHeaderSet);
-    }
-};
-
-
 const main = async () => {
     await connectToVBus();
 
     await startHeaderSetConsolidatorTimer();
 
     await startMqttLogging();
-
-    await startRecorder();
 };
 
 
