@@ -4,10 +4,7 @@
     "description": "Retrieve data and control the Resol FSK through MQTT",
     "main": "index.js",
     "dependencies": {
-      "express": "^4.18.2",
-      "morgan": "^1.10.0",
       "mqtt": "^4.3.7",
-      "request": "^2.88.2",
       "resol-vbus": "^0.25.0",
       "winston": "^3.8.2"
     },
