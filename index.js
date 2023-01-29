@@ -183,14 +183,14 @@ const startMqttLogging = async () => {
             }, {});
 
             payload = JSON.stringify({ ...params, ...{ heartbeat: new Date().toISOString() } });
-        }
-
-        if (payload) {
-            client.publish(config.mqttTopic, payload);
 
             for (const [key, value] of Object.entries(params)) {
                 client.publish(config.mqttTopic + '/' + key, value);
-            }            
+            }     
+        }
+
+        if (payload) {
+            client.publish(config.mqttTopic, payload);       
         }
     };
 
