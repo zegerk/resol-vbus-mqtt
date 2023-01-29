@@ -495,73 +495,6 @@ const startMqttLogging = async () => {
     }
 };
 
-const startPvOutputOrgLogging = async () => {
-    const onHeaderSet = async (headerSet) => {
-        const headers = headerSet.getSortedHeaders();
-        const packetFields = specification.getPacketFieldsForHeaders(headers);
-
-        const valuesById = packetFields.reduce((memo, pf) => {
-            const precision = pf.packetFieldSpec.type.precision;
-
-            const roundedRawValue = pf.rawValue.toFixed(precision);
-
-            // logger.debug('ID = ' + JSON.stringify(pf.id) + ', Name = ' + JSON.stringify(pf.name) + ', Value = ' + pf.rawValue + ', RoundedValue = ' + roundedRawValue);
-
-            memo [pf.id] = roundedRawValue;
-            return memo;
-        }, {});
-
-        const timestamp = specification.i18n.moment(headerSet.timestamp);
-
-        const params = Object.keys(config.pvOutputOrgPacketFieldMap).reduce((memo, key) => {
-            const packetFieldId = config.pvOutputOrgPacketFieldMap [key];
-
-            let value;
-            if (typeof packetFieldId === 'function') {
-                value = packetFieldId(valuesById);
-            } else {
-                value = valuesById [packetFieldId];
-            }
-            if (typeof value === 'number') {
-                value = value.toString();
-            }
-            if (typeof value === 'string') {
-                memo [key] = value;
-            }
-            return memo;
-        }, {
-            key: config.pvOutputOrgApiKey,
-            sid: config.pvOutputOrgSystemId,
-            d: timestamp.format('YYYYMMDD'),
-            t: timestamp.format('HH:mm'),
-        });
-
-        request({
-            url: 'http://pvoutput.org/service/r2/addstatus.jsp',
-            qs: params,
-        }, (error, response, body) => {
-            logger.debug(error, response, body);
-        });
-    };
-
-    if (config.pvOutputOrgInterval) {
-        logger.debug('Starting PvOutput.org logging');
-
-        const hsc = new HeaderSetConsolidator({
-            interval: config.pvOutputOrgInterval,
-        });
-
-        hsc.on('headerSet', () => {
-            onHeaderSet(headerSetConsolidator).then(null, err => {
-                logger.error(err);
-            });
-        });
-
-        hsc.startTimer();
-    }
-};
-
-
 const startTextLogging = async () => {
     let currentDatecode = null;
 
@@ -640,8 +573,6 @@ const main = async () => {
     await startHeaderSetConsolidatorTimer();
 
     await startMqttLogging();
-
-    await startPvOutputOrgLogging();
 
     await startTextLogging();
 
