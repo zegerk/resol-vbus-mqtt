@@ -395,35 +395,6 @@ const processDownloadDownloadRequest = async (req, res) => {
     }
 };
 
-
-/**
- * Start the web server.
- */
-const startWebServer = async () => {
-    logger.debug('Starting web server...');
-
-    const app = express();
-
-    app.use(morgan('dev'));
-    app.use(express.query());
-
-    app.get('/cgi-bin/get_resol_device_information', processGetResolDeviceInformationRequest);
-    app.get('/dlx/download/download', processDownloadDownloadRequest);
-
-    app.listen(3000, () => {
-        logger.debug('Started web server at: ');
-        logger.debug('  - http://0.0.0.0:' + config.webServerPort + '/ (internal)');
-        for (const iface of Object.values(os.networkInterfaces())) {
-            for (const ifaceConfig of iface) {
-                if (ifaceConfig.family === 'IPv4') {
-                    logger.debug('  - http://' + ifaceConfig.address + ':' + config.webServerPort + '/' + (ifaceConfig.internal ? ' (internal)' : ''));
-                }
-            }
-        }
-    });
-};
-
-
 const startHeaderSetConsolidatorTimer = async () => {
     logger.debug('Starting HeaderSetConsolidator timer...');
 
@@ -665,8 +636,6 @@ const startRecorder = async () => {
 
 const main = async () => {
     await connectToVBus();
-
-    //await startWebServer();
 
     await startHeaderSetConsolidatorTimer();
 
