@@ -17,12 +17,10 @@ const {
     FileSystemRecorder,
     HeaderSet,
     HeaderSetConsolidator,
-    Packet,
     SerialConnection,
     Specification,
     TcpConnection,
 } = require('resol-vbus');
-
 
 const config = require('./config');
 
@@ -45,12 +43,10 @@ const connectionClassByName = {
     TcpConnection,
 };
 
-
 const headerSetConsolidator = new HeaderSetConsolidator({
     interval: config.loggingInterval,
     timeToLive: config.loggingTimeToLive,
 });
-
 
 const fsRecorder = new FileSystemRecorder({
     id: 'fs-destination',
@@ -73,7 +69,6 @@ const headerSetHasSettled = function(headerSet) {
         return field.id + ': ' + field.name;
     }).join('\n'));
 };
-
 
 /**
  * Connect to the VBus and store the packets into the global HeaderSetConsolidator.
@@ -192,6 +187,10 @@ const startMqttLogging = async () => {
 
         if (payload) {
             client.publish(config.mqttTopic, payload);
+
+            for (const [key, value] of Object.entries(params)) {
+                client.publish(config.mqttTopic + '/' + key, value);
+            }            
         }
     };
 
