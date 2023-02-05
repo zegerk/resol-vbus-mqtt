@@ -243,17 +243,23 @@ const startMqttLogging = async () => {
                 valueConfig.id, 
                 actionOptions
             );
-            let value = datagram.value;
 
-            logger.debug(`${key} datagram ${JSON.stringify(datagram)}`);
+            if (datagram) {
+                let value = datagram.value;
 
-            if (valueConfig.type && valueConfig.type.precision) {
-                value = 
-                    (value / (valueConfig.type.precision * 10)).
-                    toFixed(valueConfig.type.precision);
+                logger.debug(`${key} datagram ${JSON.stringify(datagram)}`);
+
+                /**
+                 * @todo should not be here
+                 */
+                if (valueConfig.type && valueConfig.type.precision) {
+                    value = 
+                        (value / (valueConfig.type.precision * 10)).
+                        toFixed(valueConfig.type.precision);
+                }
+                
+                client.publish(config.mqttTopic + '/' + key, value.toString());
             }
-            
-            client.publish(config.mqttTopic + '/' + key, value.toString());
         }
 
         /**
