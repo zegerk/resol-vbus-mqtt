@@ -106,6 +106,11 @@ module.exports = {
         values: {
             counter: {
                 id: 8227,
+                writeable: false,
+            },
+            r1OperatingHours:{
+                id: 8224,
+                writeable: false,
             },
             r1SpeedMin: {
                 id: 8248,
