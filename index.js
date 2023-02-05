@@ -43,6 +43,13 @@ const actionOptions = {
     tries: 2,
 };
 
+const actionWriteOptions = {
+    timeout: 250,
+    timeoutIncr: 250,
+    tries: 6,
+    save: true,
+};
+
 const specification = Specification.getDefaultSpecification();
 
 const logger = winston.createLogger({
@@ -156,6 +163,13 @@ const startHeaderSetConsolidatorTimer = async () => {
     headerSetConsolidator.startTimer();
 };
 
+/**
+ * @todo makke this more configurable
+ * 
+ * @param {string} key 
+ * @param {boolean} write 
+ * @returns {string}
+ */
 const getMqttTopic = (key, write = false) => {
     let topic = key ? config.mqttTopic + '/' + key
                     : config.mqttTopic;
@@ -231,13 +245,13 @@ const onMqttMessage = async (topic, message) => {
                 /**
                  * Convert to internal value
                  */
-                value = parseInt(value * (10**type.precision));
-
+                value = (parseInt(value) * (10**type.precision)).toString();
+    
                 const datagram = await connection.setValueById(
                     masterAddress, 
                     valueConfig.id, 
                     value,
-                    actionOptions
+                    actionWriteOptions,
                 );
 
                 logger.debug(`Setting value to ${value} for ${key} datagram ${JSON.stringify(datagram)}`);
@@ -345,38 +359,40 @@ const startMqttLogging = async () => {
          * 
          * https://github.com/danielwippermann/resol-vbus/examples/customizer/index.js
          */
-        await waitForFreeBus();
+        if (busFree) {
+            await waitForFreeBus();
 
-        for (const [key, valueConfig] of Object.entries(config.mqttPacketFieldMap.values)) {
-            // https://gist.github.com/zegerk/9b27d7a962da28b28f07eb6b01db0572
-            let datagram = await connection.getValueById(
-                masterAddress, 
-                valueConfig.id, 
-                actionOptions
-            );
+            for (const [key, valueConfig] of Object.entries(config.mqttPacketFieldMap.values)) {
+                // https://gist.github.com/zegerk/9b27d7a962da28b28f07eb6b01db0572
+                let datagram = await connection.getValueById(
+                    masterAddress, 
+                    valueConfig.id, 
+                    actionOptions
+                );
 
-            if (datagram) {
-                let value = datagram.value;
+                if (datagram) {
+                    let value = datagram.value;
 
-                logger.debug(`${key} datagram ${JSON.stringify(datagram)}`);
+                    logger.debug(`${key} datagram ${JSON.stringify(datagram)}`);
 
-                /**
-                 * @todo should not be here
-                 */
-                if (valueConfig.type && valueConfig.type.precision) {
-                    value = 
-                        (value / (valueConfig.type.precision * 10)).
-                        toFixed(valueConfig.type.precision);
+                    /**
+                     * @todo should not be here
+                     */
+                    if (valueConfig.type && valueConfig.type.precision) {
+                        value = 
+                            (value / (valueConfig.type.precision * 10)).
+                            toFixed(valueConfig.type.precision);
+                    }
+                    
+                    client.publish(getMqttTopic(key), value.toString());
                 }
-                
-                client.publish(getMqttTopic(key), value.toString());
             }
-        }
 
-        /**
-         * Done, release the bus
-         */
-        await releaseBus(masterAddress);
+            /**
+             * Done, release the bus
+             */
+            await releaseBus(masterAddress);
+        }
     };
 
     if (config.mqttInterval) {
@@ -384,7 +400,7 @@ const startMqttLogging = async () => {
         const client = mqtt.connect(config.mqttConnect);
 
         client.on('error', err => {
-            logger.error(err);
+            logger.error(`MQTT client error ${err}`);
         });
 
         client.on('connect', () => {
@@ -430,7 +446,7 @@ const startMqttLogging = async () => {
 
             hsc.on('headerSet', () => {
                 onHeaderSet(headerSetConsolidator, client).then(null, err => {
-                    logger.error(err);
+                    logger.error(`Headerset consolidator error ${err}`);
                 });
             });
 

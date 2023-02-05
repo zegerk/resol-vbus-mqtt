@@ -109,7 +109,7 @@ module.exports = {
                 writeable: false,
             },
             boilerTempMin: {
-                id: 4112,
+                id: 4113,
                 type: {
                     precision: 1,
                     min: 10,
@@ -118,7 +118,7 @@ module.exports = {
                 writeable: true,
             },
             boilerTempTarget: {
-                id: 4109,
+                id: 4110,
                 type: {
                     precision: 1,
                     min: 30,
