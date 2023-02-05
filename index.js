@@ -22,6 +22,9 @@ const {
     TcpConnection,
 } = require('resol-vbus');
 
+let connection = false;
+let masterAddress = false;
+
 const config = require('./config');
 
 const specification = Specification.getDefaultSpecification();
@@ -60,6 +63,9 @@ const headerSetHasSettled = function(headerSet) {
     const blockTypeSections = specification.getBlockTypeSectionsForHeaders(headerSet.getHeaders());
     const blockTypeFields = specification.getBlockTypeFieldsForSections(blockTypeSections);
 
+    /**
+     * Log the whole thing
+     */
     logger.debug(packetFields.concat(blockTypeFields).map((field) => {
         return field.id + ': ' + field.name;
     }).join('\n'));
@@ -70,7 +76,8 @@ const headerSetHasSettled = function(headerSet) {
  */
 const connectToVBus = async () => {
     const ConnectionClass = connectionClassByName [config.connectionClassName];
-    const connection = new ConnectionClass(config.connectionOptions);
+ 
+    connection = new ConnectionClass(config.connectionOptions);
 
     connection.on('connectionState', (connectionState) => {
         logger.debug('Connection state changed to ' + connectionState);
@@ -96,6 +103,7 @@ const connectToVBus = async () => {
                 hasSettled = true;
 
                 headerSetHasSettled(headerSet);
+                
                 headerSet = null;
             }
         }
@@ -108,6 +116,22 @@ const connectToVBus = async () => {
     await connection.connect();
 
     logger.debug('Connected to VBus...');
+
+    /**
+     * Fetch the master address
+     */
+    logger.debug('Waiting for free VBus...');
+    let datagram = await connection.waitForFreeBus();
+    logger.debug('Free VBus, fetching master address...');
+
+    logger.debug(`Free bus datagram ${JSON.stringify(datagram)}`);
+    masterAddress = datagram.sourceAddress
+
+    logger.info(`VBus master address ${masterAddress}`);
+
+    logger.debug('Releasing VBus');
+    await connection.releaseBus(masterAddress);
+    logger.debug('Released VBus');
 };
 
 const startHeaderSetConsolidatorTimer = async () => {
@@ -129,7 +153,12 @@ const startMqttLogging = async () => {
 
                 const roundedRawValue = pf.rawValue.toFixed(precision);
 
-                logger.debug('ID = ' + JSON.stringify(pf.id) + ', Name = ' + JSON.stringify(pf.name) + ', Value = ' + pf.rawValue + ', RoundedValue = ' + roundedRawValue);
+                logger.debug(
+                    'ID = ' + JSON.stringify(pf.id) + 
+                    ', Name = ' + JSON.stringify(pf.name) + 
+                    ', Value = ' + pf.rawValue + 
+                    ', RoundedValue = ' + roundedRawValue
+                );
 
                 memo [pf.id] = roundedRawValue;
             }
@@ -142,8 +171,8 @@ const startMqttLogging = async () => {
          * @todo : the urlencoded is missing the values per topic code
          */
         if (config.mqttEncoding === 'urlencoded') {
-            payload = Object.keys(config.mqttPacketFieldMap).reduce((memo, key) => {
-                const packetFieldId = config.mqttPacketFieldMap [key];
+            payload = Object.keys(config.mqttPacketFieldMap.header).reduce((memo, key) => {
+                const packetFieldId = config.mqttPacketFieldMap.header[key];
 
                 let value;
                 if (typeof packetFieldId === 'function') {
@@ -163,8 +192,8 @@ const startMqttLogging = async () => {
                 return memo;
             }, '');
         } else {
-            const params = Object.keys(config.mqttPacketFieldMap).reduce((memo, key) => {
-                const packetFieldId = config.mqttPacketFieldMap [key];
+            const params = Object.keys(config.mqttPacketFieldMap.header).reduce((memo, key) => {
+                const packetFieldId = config.mqttPacketFieldMap.header[key];
 
                 let value;
                 if (typeof packetFieldId === 'function') {
@@ -191,6 +220,39 @@ const startMqttLogging = async () => {
         if (payload) {
             client.publish(config.mqttTopic, payload);       
         }
+
+        /**
+         * Now the header information has been retrieved we switch 
+         * to other vars not in the header
+         * 
+         * https://github.com/danielwippermann/resol-vbus/examples/customizer/index.js
+         */
+        await connection.waitForFreeBus();
+
+        // Should be configurable
+        const actionOptions = {
+            timeout: 50,
+            timeoutIncr: 100,
+            tries: 2,
+        };
+
+        for (const [key, valueConfig] of Object.entries(config.mqttPacketFieldMap.values)) {
+            // https://gist.github.com/zegerk/9b27d7a962da28b28f07eb6b01db0572
+            let datagram = await connection.getValueById(
+                masterAddress, 
+                valueConfig.id, 
+                actionOptions
+            );
+
+            logger.debug(`${key} datagram ${JSON.stringify(datagram)}`);       
+            
+            client.publish(config.mqttTopic + '/' + key, datagram.value.toString());
+        }
+
+        /**
+         * Done, release the bus
+         */
+        await connection.releaseBus(masterAddress);
     };
 
     if (config.mqttInterval) {
@@ -225,13 +287,11 @@ const main = async () => {
     await startMqttLogging();
 };
 
-
-
 if (require.main === module) {
     main(process.argv.slice(2)).then(() => {
-        logger.info('DONE!');
+        logger.info('Process started');
     }, err => {
-        logger.error(err);
+        logger.error(`Main process error ${err}`);
     });
 } else {
     module.exports = main;
