@@ -108,9 +108,23 @@ module.exports = {
                 id: 8227,
                 writeable: false,
             },
-            r1OperatingHours:{
-                id: 8224,
-                writeable: false,
+            boilerTempMin: {
+                id: 4112,
+                type: {
+                    precision: 1,
+                    min: 10,
+                    max: 80,
+                },
+                writeable: true,
+            },
+            boilerTempTarget: {
+                id: 4109,
+                type: {
+                    precision: 1,
+                    min: 30,
+                    max: 85,
+                },
+                writeable: true,
             },
             r1SpeedMin: {
                 id: 8248,

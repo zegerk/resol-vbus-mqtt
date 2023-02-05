@@ -12,6 +12,11 @@
 const winston = require('winston');
 const mqtt = require('mqtt');
 
+/**
+ * Mapping topics to parameters
+ */
+let mqttMessageMap = {};
+
 const {
     Converter,
     FileSystemRecorder,
@@ -26,6 +31,17 @@ let connection = false;
 let masterAddress = false;
 
 const config = require('./config');
+
+/**
+ * Config for get / set action
+ * 
+ * @todo configurable
+ */
+const actionOptions = {
+    timeout: 50,
+    timeoutIncr: 100,
+    tries: 2,
+};
 
 const specification = Specification.getDefaultSpecification();
 
@@ -121,7 +137,7 @@ const connectToVBus = async () => {
      * Fetch the master address
      */
     logger.debug('Waiting for free VBus...');
-    let datagram = await connection.waitForFreeBus();
+    let datagram = await waitForFreeBus();
     logger.debug('Free VBus, fetching master address...');
 
     logger.debug(`Free bus datagram ${JSON.stringify(datagram)}`);
@@ -130,7 +146,7 @@ const connectToVBus = async () => {
     logger.info(`VBus master address ${masterAddress}`);
 
     logger.debug('Releasing VBus');
-    await connection.releaseBus(masterAddress);
+    await releaseBus(masterAddress);
     logger.debug('Released VBus');
 };
 
@@ -140,7 +156,108 @@ const startHeaderSetConsolidatorTimer = async () => {
     headerSetConsolidator.startTimer();
 };
 
+const getMqttTopic = (key, write = false) => {
+    let topic = key ? config.mqttTopic + '/' + key
+                    : config.mqttTopic;
+    
+    if (write) {
+        topic += '/set';
+    }
+
+    return topic;
+}
+
+/**
+ * Code to keep local control of the bus using
+ * a semaphore
+ */
+let busFree = true
+
+const waitForFreeBus = async () => {
+    const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    let tries = 0;
+
+    /**
+     * @todo wait and tries should be configurable
+     */
+    while (!busFree) {
+        await wait(100);
+        tries++;
+
+        if (tries > 50) {
+            return false;
+        }
+    }
+
+    busFree = false;
+
+    return connection.waitForFreeBus();   
+}
+
+const releaseBus = async (masterAddress) => {
+    const result = await connection.releaseBus(masterAddress);  
+     
+    busFree = true;
+
+    return result;
+}
+
+/**
+ * Handle the setting of values
+ * 
+ * @param {string} topic 
+ * @param {string} message 
+ */
+const onMqttMessage = async (topic, message) => {
+    if (mqttMessageMap[topic]) {
+        const { key, valueConfig } = mqttMessageMap[topic];
+        logger.debug(`Topic config ${key} ${JSON.stringify(valueConfig)}`);
+
+        const freeBusResult = await waitForFreeBus();
+                
+        if (freeBusResult) {
+            logger.debug(`Setting value free bus ${JSON.stringify(freeBusResult)}`);
+
+            const type = valueConfig.type;
+
+            /**
+             * @todo assumes it is numeric!
+             */
+            let value = parseFloat(message);
+
+            if (value > type.max || value < type.min) {
+                logger.error(`Value for ${key} out of range ${value} ${min} ${max}`);
+            } else {
+                /**
+                 * Convert to internal value
+                 */
+                value = parseInt(value * (10**type.precision));
+
+                const datagram = await connection.getValueById(
+                    masterAddress, 
+                    valueConfig.id, 
+                    actionOptions
+                );
+
+                logger.debug(`Setting value to ${value} for ${key} datagram ${JSON.stringify(datagram)}`);
+            }
+
+            await releaseBus(masterAddress);
+
+        } else {
+            logger.error('Timed out on waiting for free bus when setting value')
+        }
+    }
+}
+
 const startMqttLogging = async () => {
+
+    /**
+     * Called every cycle
+     *
+     * @param {*} headerSet 
+     * @param {*} client 
+     */
     const onHeaderSet = async (headerSet, client) => {
         const headers = headerSet.getSortedHeaders();
         const packetFields = specification.getPacketFieldsForHeaders(headers);
@@ -213,12 +330,12 @@ const startMqttLogging = async () => {
             payload = JSON.stringify({ ...params, ...{ heartbeat: new Date().toISOString() } });
 
             for (const [key, value] of Object.entries(params)) {
-                client.publish(config.mqttTopic + '/' + key, value);
+                client.publish(getMqttTopic(key), value);
             }     
         }
 
         if (payload) {
-            client.publish(config.mqttTopic, payload);       
+            client.publish(getMqttTopic(), payload);       
         }
 
         /**
@@ -227,14 +344,7 @@ const startMqttLogging = async () => {
          * 
          * https://github.com/danielwippermann/resol-vbus/examples/customizer/index.js
          */
-        await connection.waitForFreeBus();
-
-        // Should be configurable
-        const actionOptions = {
-            timeout: 50,
-            timeoutIncr: 100,
-            tries: 2,
-        };
+        await waitForFreeBus();
 
         for (const [key, valueConfig] of Object.entries(config.mqttPacketFieldMap.values)) {
             // https://gist.github.com/zegerk/9b27d7a962da28b28f07eb6b01db0572
@@ -258,14 +368,14 @@ const startMqttLogging = async () => {
                         toFixed(valueConfig.type.precision);
                 }
                 
-                client.publish(config.mqttTopic + '/' + key, value.toString());
+                client.publish(getMqttTopic(key), value.toString());
             }
         }
 
         /**
          * Done, release the bus
          */
-        await connection.releaseBus(masterAddress);
+        await releaseBus(masterAddress);
     };
 
     if (config.mqttInterval) {
@@ -277,6 +387,42 @@ const startMqttLogging = async () => {
         });
 
         client.on('connect', () => {
+            /**
+             * Subscribe to writable topics
+             */
+            for (const [key, valueConfig] of Object.entries(config.mqttPacketFieldMap.values)) {
+                if (valueConfig.writeable) {
+
+                    const type = valueConfig.type
+                    
+                    /**
+                     * Do not allow setting of values through mqtt if we cannot
+                     * sanitize it
+                     */
+                    if (type && type.min && type.max && type.precision) {
+                        const topic = getMqttTopic(key, true);
+
+                        logger.info(`MQTT subscribing to ${topic}`);
+
+                        mqttMessageMap[topic] = { key, valueConfig };
+
+                        client.subscribe(topic, function (err) {
+                            if (err) {
+                                logger.error(`MQTT subscribe error ${err}`)
+                            }
+                        })
+                    } else {
+                        logger.error(`Setting values only allowed when min, max and precision are set (${key})`)
+                    }
+                }
+            }
+
+            client.on('message', function (topic, message) {
+                message = message.toString();
+                logger.debug(`MQTT message received ${topic} ${message}`);
+                onMqttMessage(topic, message);
+            })
+
             const hsc = new HeaderSetConsolidator({
                 interval: config.mqttInterval,
             });
