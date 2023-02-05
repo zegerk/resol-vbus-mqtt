@@ -233,9 +233,10 @@ const onMqttMessage = async (topic, message) => {
                  */
                 value = parseInt(value * (10**type.precision));
 
-                const datagram = await connection.getValueById(
+                const datagram = await connection.setValueById(
                     masterAddress, 
                     valueConfig.id, 
+                    value,
                     actionOptions
                 );
 
