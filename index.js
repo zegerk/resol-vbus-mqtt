@@ -416,7 +416,7 @@ const startMqttLogging = async () => {
                      * Do not allow setting of values through mqtt if we cannot
                      * sanitize it
                      */
-                    if (type && type.min && type.max && type.precision) {
+                    if (type && 'min' in type && 'max' in type  && 'precision' in type) {
                         const topic = getMqttTopic(key, true);
 
                         logger.info(`MQTT subscribing to ${topic}`);
