@@ -100,14 +100,47 @@ module.exports = {
      *    value_template: "{{ value_json.temp1 }}"
      */
     mqttPacketFieldMap: {
-        /**
-         * Values are pulled from the master device
-         */
         values: {
             counter: {
                 id: 8227,
-                writeable: false,
             },
+            relay1Mode: {
+                id: 4128,
+                type: {
+		            // 0: off, 1: auto, 2: min, 3:max 
+                    precision: 0,
+                    min: 0,
+                    max: 3,
+                },
+                writeable: true,
+            },
+    	    boilerTempMax: {
+    		id: 4097,
+    		type: {
+    		    precision: 1,
+    		    min: 30,
+    	            max: 95,
+        		},
+        		writeable: true,
+    	    },
+                boilerTempDeltaOn: {
+    		id: 4187,
+    		type: {
+    		    precision: 1,
+    		    min: 1,
+    		    max: 25,
+    		},
+    		writeable: true,
+    	    },
+            boilerTempDeltaOff:{
+                id: 4190,
+                type: {
+                    precision: 1,
+                    min: 0.5,
+                    max: 24.9,
+                },
+		        writeable: true,
+            },		
             boilerTempMin: {
                 id: 4113,
                 type: {
@@ -125,6 +158,10 @@ module.exports = {
                     max: 85,
                 },
                 writeable: true,
+            },  
+	        r1OperatingHours:{
+                id: 8224,
+                writeable: false,
             },
             r1SpeedMin: {
                 id: 8248,
@@ -155,4 +192,5 @@ module.exports = {
             heatQuantity2: '00_8015_4AF9_10_A85F_00_0015_5611_10_0100_01_05_1_004_4_0',
         }
     },
+
 };
